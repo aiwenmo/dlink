@@ -33,6 +33,7 @@ import org.apache.flink.table.api.ExplainDetail;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.table.api.internal.TableEnvironmentInternal;
 import org.apache.flink.table.delegation.Planner;
+import org.apache.flink.table.operations.ModifyOperation;
 
 import java.io.File;
 import java.net.URL;
@@ -59,6 +60,10 @@ public interface CustomTableEnvironment
     JobPlanInfo getJobPlanInfo(List<String> statements);
 
     StreamGraph getStreamGraphFromInserts(List<String> statements);
+
+    ModifyOperation getModifyOperationFromInsert(String statement);
+
+    StreamGraph getStreamGraphFromModifyOperations(List<ModifyOperation> modifyOperations);
 
     SqlExplainResult explainSqlRecord(String statement, ExplainDetail... extraDetails);
 

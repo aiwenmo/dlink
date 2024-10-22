@@ -280,6 +280,34 @@ public class CustomTableEnvironmentImpl extends AbstractCustomTableEnvironment {
         }
     }
 
+    public ModifyOperation getModifyOperationFromInsert(String statement) {
+        List<Operation> operations = getParser().parse(statement);
+        if (operations.isEmpty()) {
+            throw new TableException("No statement is parsed.");
+        }
+        if (operations.size() > 1) {
+            throw new TableException("Only single statement is supported.");
+        }
+        Operation operation = operations.get(0);
+        if (operation instanceof ModifyOperation) {
+            return (ModifyOperation) operation;
+        } else {
+            throw new TableException("Only insert statement is supported now.");
+        }
+    }
+
+    public StreamGraph getStreamGraphFromModifyOperations(List<ModifyOperation> modifyOperations) {
+        List<Transformation<?>> trans = getPlanner().translate(modifyOperations);
+        for (Transformation<?> transformation : trans) {
+            getStreamExecutionEnvironment().addOperator(transformation);
+        }
+        StreamGraph streamGraph = getStreamExecutionEnvironment().getStreamGraph();
+        if (getConfig().getConfiguration().containsKey(PipelineOptions.NAME.key())) {
+            streamGraph.setJobName(getConfig().getConfiguration().getString(PipelineOptions.NAME));
+        }
+        return streamGraph;
+    }
+
     @Override
     public SqlExplainResult explainSqlRecord(String statement, ExplainDetail... extraDetails) {
         SqlExplainResult record = new SqlExplainResult();

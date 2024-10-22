@@ -34,6 +34,8 @@ import org.dinky.interceptor.FlinkInterceptor;
 import org.dinky.job.JobConfig;
 import org.dinky.job.JobManager;
 import org.dinky.job.JobParam;
+import org.dinky.job.JobStatementPlan;
+import org.dinky.job.JobStatementType;
 import org.dinky.job.StatementParam;
 import org.dinky.job.builder.JobUDFBuilder;
 import org.dinky.parser.SqlType;
@@ -110,6 +112,51 @@ public class Explainer {
             e.printStackTrace();
         }
         return this;
+    }
+
+    public JobStatementPlan parseStatements(String[] statements) {
+        JobStatementPlan jobStatementPlan = new JobStatementPlan();
+
+        List<String> udfStatements = new ArrayList<>();
+        Optional.ofNullable(jobManager.getConfig().getUdfRefer())
+                .ifPresent(t -> t.forEach((key, value) -> {
+                    String sql = String.format("create temporary function %s as '%s'", value, key);
+                    udfStatements.add(sql);
+                }));
+        for (String udfStatement : udfStatements) {
+            jobStatementPlan.addJobStatementGenerated(udfStatement, JobStatementType.UDF);
+        }
+
+        for (String item : statements) {
+            String statement = executor.pretreatStatement(item);
+            if (statement.isEmpty()) {
+                continue;
+            }
+            SqlType operationType = Operations.getOperationType(statement);
+            if (operationType.equals(SqlType.SET) && SetSqlParseStrategy.INSTANCE.match(statement)) {
+                jobStatementPlan.addJobStatement(statement, JobStatementType.SET);
+            } else if (operationType.equals(SqlType.ADD)) {
+                jobStatementPlan.addJobStatement(statement, JobStatementType.ADD);
+            } else if (operationType.equals(SqlType.ADD_FILE)) {
+                jobStatementPlan.addJobStatement(statement, JobStatementType.ADD_FILE);
+            } else if (operationType.equals(SqlType.ADD_JAR)) {
+                jobStatementPlan.addJobStatement(statement, JobStatementType.ADD_JAR);
+            } else if (SqlType.getTransSqlTypes().contains(operationType)) {
+                jobStatementPlan.addJobStatement(statement, JobStatementType.SQL);
+                if (!useStatementSet) {
+                    break;
+                }
+            } else if (operationType.equals(SqlType.EXECUTE)) {
+                jobStatementPlan.addJobStatement(statement, JobStatementType.EXECUTE);
+            } else if (operationType.equals(SqlType.PRINT)) {
+                jobStatementPlan.addJobStatement(statement, JobStatementType.PRINT);
+            } else if (UDFUtil.isUdfStatement(statement)) {
+                jobStatementPlan.addJobStatement(statement, JobStatementType.UDF);
+            } else {
+                jobStatementPlan.addJobStatement(statement, JobStatementType.DDL);
+            }
+        }
+        return jobStatementPlan;
     }
 
     public JobParam pretreatStatements(String[] statements) {

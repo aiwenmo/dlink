@@ -50,11 +50,8 @@ import org.dinky.gateway.enums.SavePointType;
 import org.dinky.gateway.result.GatewayResult;
 import org.dinky.gateway.result.SavePointResult;
 import org.dinky.gateway.result.TestResult;
-import org.dinky.job.builder.JobDDLBuilder;
-import org.dinky.job.builder.JobExecuteBuilder;
 import org.dinky.job.builder.JobJarStreamGraphBuilder;
-import org.dinky.job.builder.JobTransBuilder;
-import org.dinky.job.builder.JobUDFBuilder;
+import org.dinky.job.runner.JobJarRunner;
 import org.dinky.parser.SqlType;
 import org.dinky.trans.Operations;
 import org.dinky.trans.parse.AddFileSqlParseStrategy;
@@ -111,6 +108,7 @@ public class JobManager {
     private boolean useRestAPI = false;
     private GatewayType runMode = GatewayType.LOCAL;
     private JobParam jobParam = null;
+    private JobStatementPlan jobStatementPlan = null;
     private String currentSql = "";
     private final WeakReference<DinkyClassLoader> dinkyClassLoader = new WeakReference<>(DinkyClassLoader.build());
     private Job job;
@@ -256,11 +254,16 @@ public class JobManager {
                 .map(t -> executor.pretreatStatement(t))
                 .collect(Collectors.toList());
         statement = String.join(";\n", statements);
-        jobParam =
-                Explainer.build(executor, useStatementSet, this).pretreatStatements(SqlUtil.getStatements(statement));
+        jobStatementPlan =
+                Explainer.build(executor, useStatementSet, this).parseStatements(SqlUtil.getStatements(statement));
         job = Job.build(runMode, config, executorConfig, executor, statement, useGateway);
         ready();
         try {
+            for (JobStatement jobStatement : jobStatementPlan.getJobStatementList()) {
+                JobJarRunner jobJarRunner = new JobJarRunner(this);
+                jobJarRunner.run(jobStatement);
+            }
+
             JobJarStreamGraphBuilder.build(this).run();
             if (job.isFailed()) {
                 failed();
@@ -288,18 +291,16 @@ public class JobManager {
         ready();
 
         DinkyClassLoaderUtil.initClassLoader(config, getDinkyClassLoader());
-        jobParam =
-                Explainer.build(executor, useStatementSet, this).pretreatStatements(SqlUtil.getStatements(statement));
+        jobStatementPlan =
+                Explainer.build(executor, useStatementSet, this).parseStatements(SqlUtil.getStatements(statement));
         try {
-            // step 1: init udf
-            JobUDFBuilder.build(this).run();
-            // step 2: execute ddl
-            JobDDLBuilder.build(this).run();
-            // step 3: execute insert/select/show/desc/CTAS...
-            JobTransBuilder.build(this).run();
-            // step 4: execute custom data stream task
-            JobExecuteBuilder.build(this).run();
-            // finished
+            jobStatementPlan.buildFinalExecutableStatement();
+
+            for (JobStatement jobStatement : jobStatementPlan.getJobStatementList()) {
+                JobRunnerFactory.getJobRunner(jobStatement.getStatementType(), this)
+                        .run(jobStatement);
+            }
+
             job.setEndTime(LocalDateTime.now());
             if (job.isFailed()) {
                 failed();

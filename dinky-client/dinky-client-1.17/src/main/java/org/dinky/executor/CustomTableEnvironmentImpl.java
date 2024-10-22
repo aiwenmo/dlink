@@ -144,4 +144,24 @@ public class CustomTableEnvironmentImpl extends AbstractCustomTableEnvironment {
 
         return transOperatoinsToStreamGraph(modifyOperations);
     }
+
+    public ModifyOperation getModifyOperationFromInsert(String statement) {
+        List<Operation> operations = getParser().parse(statement);
+        if (operations.isEmpty()) {
+            throw new TableException("No statement is parsed.");
+        }
+        if (operations.size() > 1) {
+            throw new TableException("Only single statement is supported.");
+        }
+        Operation operation = operations.get(0);
+        if (operation instanceof ModifyOperation) {
+            return (ModifyOperation) operation;
+        } else {
+            throw new TableException("Only insert statement is supported now.");
+        }
+    }
+
+    public StreamGraph getStreamGraphFromModifyOperations(List<ModifyOperation> modifyOperations) {
+        return transOperatoinsToStreamGraph(modifyOperations);
+    }
 }

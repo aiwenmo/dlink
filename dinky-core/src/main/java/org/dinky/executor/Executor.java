@@ -44,6 +44,7 @@ import org.apache.flink.table.api.ExplainDetail;
 import org.apache.flink.table.api.StatementSet;
 import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.api.TableResult;
+import org.apache.flink.table.operations.ModifyOperation;
 
 import java.io.File;
 import java.net.URL;
@@ -288,10 +289,22 @@ public abstract class Executor {
         return tableEnvironment.getJobGraphFromInserts(statements);
     }
 
+    public ModifyOperation getModifyOperationFromInsert(String statement) {
+        return tableEnvironment.getModifyOperationFromInsert(statement);
+    }
+
+    public StreamGraph getStreamGraphFromModifyOperations(List<ModifyOperation> modifyOperations) {
+        return tableEnvironment.getStreamGraphFromModifyOperations(modifyOperations);
+    }
+
     public TableResult executeStatementSet(List<String> statements) {
         StatementSet statementSet = tableEnvironment.createStatementSet();
         statements.forEach(statementSet::addInsertSql);
         return statementSet.execute();
+    }
+
+    public TableResult executeModifyOperations(List<ModifyOperation> modifyOperations) throws Exception {
+        return tableEnvironment.executeInternal(modifyOperations);
     }
 
     public String explainStatementSet(List<String> statements) {
