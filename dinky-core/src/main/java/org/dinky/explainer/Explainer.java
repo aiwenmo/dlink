@@ -34,6 +34,8 @@ import org.dinky.interceptor.FlinkInterceptor;
 import org.dinky.job.JobConfig;
 import org.dinky.job.JobManager;
 import org.dinky.job.JobParam;
+import org.dinky.job.JobRunnerFactory;
+import org.dinky.job.JobStatement;
 import org.dinky.job.JobStatementPlan;
 import org.dinky.job.JobStatementType;
 import org.dinky.job.StatementParam;
@@ -124,7 +126,7 @@ public class Explainer {
                     udfStatements.add(sql);
                 }));
         for (String udfStatement : udfStatements) {
-            jobStatementPlan.addJobStatementGenerated(udfStatement, JobStatementType.UDF);
+            jobStatementPlan.addJobStatementGenerated(udfStatement, JobStatementType.UDF, SqlType.CREATE);
         }
 
         for (String item : statements) {
@@ -134,26 +136,26 @@ public class Explainer {
             }
             SqlType operationType = Operations.getOperationType(statement);
             if (operationType.equals(SqlType.SET) && SetSqlParseStrategy.INSTANCE.match(statement)) {
-                jobStatementPlan.addJobStatement(statement, JobStatementType.SET);
+                jobStatementPlan.addJobStatement(statement, JobStatementType.SET, operationType);
             } else if (operationType.equals(SqlType.ADD)) {
-                jobStatementPlan.addJobStatement(statement, JobStatementType.ADD);
+                jobStatementPlan.addJobStatement(statement, JobStatementType.ADD, operationType);
             } else if (operationType.equals(SqlType.ADD_FILE)) {
-                jobStatementPlan.addJobStatement(statement, JobStatementType.ADD_FILE);
+                jobStatementPlan.addJobStatement(statement, JobStatementType.ADD_FILE, operationType);
             } else if (operationType.equals(SqlType.ADD_JAR)) {
-                jobStatementPlan.addJobStatement(statement, JobStatementType.ADD_JAR);
+                jobStatementPlan.addJobStatement(statement, JobStatementType.ADD_JAR, operationType);
             } else if (SqlType.getTransSqlTypes().contains(operationType)) {
-                jobStatementPlan.addJobStatement(statement, JobStatementType.SQL);
+                jobStatementPlan.addJobStatement(statement, JobStatementType.SQL, operationType);
                 if (!useStatementSet) {
                     break;
                 }
             } else if (operationType.equals(SqlType.EXECUTE)) {
-                jobStatementPlan.addJobStatement(statement, JobStatementType.EXECUTE);
+                jobStatementPlan.addJobStatement(statement, JobStatementType.EXECUTE, operationType);
             } else if (operationType.equals(SqlType.PRINT)) {
-                jobStatementPlan.addJobStatement(statement, JobStatementType.PRINT);
+                jobStatementPlan.addJobStatement(statement, JobStatementType.PRINT, operationType);
             } else if (UDFUtil.isUdfStatement(statement)) {
-                jobStatementPlan.addJobStatement(statement, JobStatementType.UDF);
+                jobStatementPlan.addJobStatement(statement, JobStatementType.UDF, operationType);
             } else {
-                jobStatementPlan.addJobStatement(statement, JobStatementType.DDL);
+                jobStatementPlan.addJobStatement(statement, JobStatementType.DDL, operationType);
             }
         }
         return jobStatementPlan;
@@ -257,6 +259,35 @@ public class Explainer {
     }
 
     public ExplainResult explainSql(String statement) {
+        log.info("Start explain FlinkSQL...");
+        JobStatementPlan jobStatementPlan;
+        List<SqlExplainResult> sqlExplainRecords = new ArrayList<>();
+        boolean correct = true;
+        try {
+            jobStatementPlan = parseStatements(SqlUtil.getStatements(statement));
+            jobStatementPlan.buildFinalExecutableStatement();
+        } catch (Exception e) {
+            SqlExplainResult.Builder resultBuilder = SqlExplainResult.Builder.newBuilder();
+            resultBuilder.error(e.getMessage()).parseTrue(false);
+            sqlExplainRecords.add(resultBuilder.build());
+            log.error("Failed parseStatements:", e);
+            return new ExplainResult(false, sqlExplainRecords.size(), sqlExplainRecords);
+        }
+        JobRunnerFactory jobRunnerFactory = JobRunnerFactory.create(jobManager);
+        for (JobStatement jobStatement : jobStatementPlan.getJobStatementList()) {
+            SqlExplainResult sqlExplainResult = jobRunnerFactory
+                    .getJobRunner(jobStatement.getStatementType())
+                    .explain(jobStatement);
+            if (!sqlExplainResult.isSkipped()) {
+                sqlExplainRecords.add(sqlExplainResult);
+            }
+        }
+
+        log.info(StrUtil.format("A total of {} FlinkSQL have been Explained.", sqlExplainRecords.size()));
+        return new ExplainResult(correct, sqlExplainRecords.size(), sqlExplainRecords);
+    }
+
+    public ExplainResult explainSql2(String statement) {
         log.info("Start explain FlinkSQL...");
         JobParam jobParam;
         List<SqlExplainResult> sqlExplainRecords = new ArrayList<>();

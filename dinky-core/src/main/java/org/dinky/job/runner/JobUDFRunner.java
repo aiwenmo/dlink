@@ -26,8 +26,8 @@ import static org.dinky.function.util.UDFUtil.YARN;
 import org.dinky.data.model.SystemConfiguration;
 import org.dinky.function.data.model.UDF;
 import org.dinky.function.util.UDFUtil;
+import org.dinky.job.AbstractJobRunner;
 import org.dinky.job.JobManager;
-import org.dinky.job.JobRunner;
 import org.dinky.job.JobStatement;
 import org.dinky.utils.URLUtils;
 
@@ -44,9 +44,7 @@ import cn.hutool.core.util.StrUtil;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class JobUDFRunner implements JobRunner {
-
-    private JobManager jobManager;
+public class JobUDFRunner extends AbstractJobRunner {
 
     public JobUDFRunner(JobManager jobManager) {
         this.jobManager = jobManager;

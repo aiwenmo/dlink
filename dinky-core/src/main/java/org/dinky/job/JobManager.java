@@ -264,7 +264,6 @@ public class JobManager {
                 jobJarRunner.run(jobStatement);
             }
 
-            JobJarStreamGraphBuilder.build(this).run();
             if (job.isFailed()) {
                 failed();
             } else {
@@ -295,10 +294,9 @@ public class JobManager {
                 Explainer.build(executor, useStatementSet, this).parseStatements(SqlUtil.getStatements(statement));
         try {
             jobStatementPlan.buildFinalExecutableStatement();
-
+            JobRunnerFactory jobRunnerFactory = JobRunnerFactory.create(this);
             for (JobStatement jobStatement : jobStatementPlan.getJobStatementList()) {
-                JobRunnerFactory.getJobRunner(jobStatement.getStatementType(), this)
-                        .run(jobStatement);
+                jobRunnerFactory.getJobRunner(jobStatement.getStatementType()).run(jobStatement);
             }
 
             job.setEndTime(LocalDateTime.now());
@@ -369,10 +367,14 @@ public class JobManager {
     }
 
     public ExplainResult explainSql(String statement) {
+        return Explainer.build(executor, useStatementSet, this).explainSql(statement);
+    }
+
+    /*public ExplainResult explainSql(String statement) {
         return Explainer.build(executor, useStatementSet, this)
                 .initialize(config, statement)
                 .explainSql(statement);
-    }
+    }*/
 
     public ObjectNode getStreamGraph(String statement) {
         return Explainer.build(executor, useStatementSet, this)

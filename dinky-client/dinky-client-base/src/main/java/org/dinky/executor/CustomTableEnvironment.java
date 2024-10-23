@@ -34,6 +34,7 @@ import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.table.api.internal.TableEnvironmentInternal;
 import org.apache.flink.table.delegation.Planner;
 import org.apache.flink.table.operations.ModifyOperation;
+import org.apache.flink.table.operations.Operation;
 
 import java.io.File;
 import java.net.URL;
@@ -66,6 +67,8 @@ public interface CustomTableEnvironment
     StreamGraph getStreamGraphFromModifyOperations(List<ModifyOperation> modifyOperations);
 
     SqlExplainResult explainSqlRecord(String statement, ExplainDetail... extraDetails);
+
+    SqlExplainResult explainOperation(List<Operation> operations, ExplainDetail... extraDetails);
 
     StreamExecutionEnvironment getStreamExecutionEnvironment();
 

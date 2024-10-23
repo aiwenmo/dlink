@@ -17,13 +17,9 @@
  *
  */
 
-package org.dinky.job.runner;
+package org.dinky.job;
 
-import org.dinky.assertion.Asserts;
 import org.dinky.data.result.SqlExplainResult;
-import org.dinky.job.AbstractJobRunner;
-import org.dinky.job.JobManager;
-import org.dinky.job.JobStatement;
 import org.dinky.utils.LogUtil;
 import org.dinky.utils.SqlUtil;
 
@@ -33,29 +29,16 @@ import cn.hutool.core.text.StrFormatter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class JobDDLRunner extends AbstractJobRunner {
+public abstract class AbstractJobRunner implements JobRunner {
 
-    public JobDDLRunner(JobManager jobManager) {
-        this.jobManager = jobManager;
-    }
+    protected JobManager jobManager;
 
-    @Override
-    public void run(JobStatement jobStatement) throws Exception {
-        jobManager.getExecutor().executeSql(jobStatement.getStatement());
-    }
-
-    @Override
     public SqlExplainResult explain(JobStatement jobStatement) {
         SqlExplainResult.Builder resultBuilder = SqlExplainResult.Builder.newBuilder();
         try {
-            SqlExplainResult recordResult = jobManager.getExecutor().explainSqlRecord(jobStatement.getStatement());
-            if (Asserts.isNull(recordResult)) {
-                return resultBuilder.isSkipped().build();
-            }
-            resultBuilder = SqlExplainResult.newBuilder(recordResult);
-            // Flink DDL needs to execute to create catalog.
             run(jobStatement);
             resultBuilder
+                    .parseTrue(true)
                     .explainTrue(true)
                     .type(jobStatement.getSqlType().getType())
                     .sql(jobStatement.getStatement())
@@ -66,6 +49,7 @@ public class JobDDLRunner extends AbstractJobRunner {
                     SqlUtil.addLineNumber(jobStatement.getStatement()),
                     LogUtil.getError(e));
             resultBuilder
+                    .parseTrue(false)
                     .error(error)
                     .explainTrue(false)
                     .type(jobStatement.getSqlType().getType())

@@ -24,38 +24,49 @@ import org.dinky.data.enums.GatewayType;
 import org.dinky.data.result.IResult;
 import org.dinky.data.result.InsertResult;
 import org.dinky.data.result.ResultBuilder;
+import org.dinky.data.result.SqlExplainResult;
 import org.dinky.executor.Executor;
 import org.dinky.gateway.Gateway;
 import org.dinky.gateway.result.GatewayResult;
 import org.dinky.interceptor.FlinkInterceptor;
 import org.dinky.interceptor.FlinkInterceptorResult;
+import org.dinky.job.AbstractJobRunner;
 import org.dinky.job.Job;
 import org.dinky.job.JobConfig;
 import org.dinky.job.JobManager;
-import org.dinky.job.JobRunner;
 import org.dinky.job.JobStatement;
 import org.dinky.parser.SqlType;
+import org.dinky.utils.LogUtil;
+import org.dinky.utils.SqlUtil;
 import org.dinky.utils.URLUtils;
 
 import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.table.api.TableResult;
 import org.apache.flink.table.operations.ModifyOperation;
+import org.apache.flink.table.operations.Operation;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.UUID;
 
-public class JobSqlRunner implements JobRunner {
+import cn.hutool.core.text.StrFormatter;
+import lombok.extern.slf4j.Slf4j;
 
-    private JobManager jobManager;
-    private List<String> insertStatements;
+@Slf4j
+public class JobSqlRunner extends AbstractJobRunner {
+
     private List<ModifyOperation> modifyOperations;
+    private List<String> statements;
+    private List<Operation> operations;
 
     public JobSqlRunner(JobManager jobManager) {
         this.jobManager = jobManager;
         this.modifyOperations = new ArrayList<>();
+        this.statements = new ArrayList<>();
+        this.operations = new ArrayList<>();
     }
 
     @Override
@@ -64,6 +75,46 @@ public class JobSqlRunner implements JobRunner {
             handleStatementSet(jobStatement);
         } else {
             handleNonStatementSet(jobStatement);
+        }
+    }
+
+    @Override
+    public SqlExplainResult explain(JobStatement jobStatement) {
+        SqlExplainResult.Builder resultBuilder = SqlExplainResult.Builder.newBuilder();
+
+        try {
+            ModifyOperation modifyOperation =
+                    jobManager.getExecutor().getModifyOperationFromInsert(jobStatement.getStatement());
+            operations.add(modifyOperation);
+            statements.add(jobStatement.getStatement());
+            if (jobStatement.isFinalExecutableStatement()) {
+                SqlExplainResult sqlExplainResult = jobManager.getExecutor().explainOperation(operations);
+                resultBuilder = SqlExplainResult.newBuilder(sqlExplainResult);
+                resultBuilder.sql(getParsedSql()).index(jobStatement.getIndex());
+            } else {
+                resultBuilder
+                        .sql(getParsedSql())
+                        .type(jobStatement.getSqlType().getType())
+                        .parseTrue(true)
+                        .explainTrue(true)
+                        .index(jobStatement.getIndex())
+                        .isSkipped();
+            }
+        } catch (Exception e) {
+            String error = StrFormatter.format(
+                    "Exception in explaining FlinkSQL:\n{}\n{}",
+                    SqlUtil.addLineNumber(jobStatement.getStatement()),
+                    LogUtil.getError(e));
+            resultBuilder
+                    .error(error)
+                    .explainTrue(false)
+                    .type(jobStatement.getSqlType().getType())
+                    .sql(jobStatement.getStatement())
+                    .index(jobStatement.getIndex());
+            log.error(error);
+        } finally {
+            resultBuilder.explainTime(LocalDateTime.now());
+            return resultBuilder.build();
         }
     }
 
@@ -94,7 +145,7 @@ public class JobSqlRunner implements JobRunner {
         ModifyOperation modifyOperation =
                 jobManager.getExecutor().getModifyOperationFromInsert(jobStatement.getStatement());
         modifyOperations.add(modifyOperation);
-        insertStatements.add(jobStatement.getStatement());
+        statements.add(jobStatement.getStatement());
         if (jobStatement.isFinalExecutableStatement()) {
             TableResult tableResult = jobManager.getExecutor().executeModifyOperations(modifyOperations);
             updateJobWithTableResult(tableResult);
@@ -166,7 +217,7 @@ public class JobSqlRunner implements JobRunner {
         GatewayType runMode = jobManager.getRunMode();
         Executor executor = jobManager.getExecutor();
 
-        insertStatements.add(jobStatement.getStatement());
+        statements.add(jobStatement.getStatement());
         // Use gateway need to build gateway config, include flink configuration.
         config.addGatewayConfig(executor.getCustomTableEnvironment().getConfig().getConfiguration());
 
@@ -198,11 +249,11 @@ public class JobSqlRunner implements JobRunner {
 
     private String getParsedSql() {
         StringBuilder sb = new StringBuilder();
-        for (String insertStatement : insertStatements) {
+        for (String statement : statements) {
             if (sb.length() > 0) {
                 sb.append(";\n");
             }
-            sb.append(insertStatement);
+            sb.append(statement);
         }
         return sb.toString();
     }

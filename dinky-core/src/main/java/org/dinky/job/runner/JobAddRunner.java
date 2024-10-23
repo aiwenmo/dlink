@@ -20,8 +20,8 @@
 package org.dinky.job.runner;
 
 import org.dinky.executor.CustomTableEnvironment;
+import org.dinky.job.AbstractJobRunner;
 import org.dinky.job.JobManager;
-import org.dinky.job.JobRunner;
 import org.dinky.job.JobStatement;
 import org.dinky.trans.parse.AddFileSqlParseStrategy;
 import org.dinky.trans.parse.AddJarSqlParseStrategy;
@@ -30,9 +30,10 @@ import org.dinky.utils.URLUtils;
 import org.apache.flink.configuration.Configuration;
 import org.apache.flink.core.fs.FileSystem;
 
-public class JobAddRunner implements JobRunner {
+import lombok.extern.slf4j.Slf4j;
 
-    private JobManager jobManager;
+@Slf4j
+public class JobAddRunner extends AbstractJobRunner {
 
     public JobAddRunner(JobManager jobManager) {
         this.jobManager = jobManager;

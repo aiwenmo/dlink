@@ -21,11 +21,6 @@ package org.dinky.data.result;
 
 import java.time.LocalDateTime;
 
-/**
- * 解释结果
- *
- * @since 2021/6/7 22:06
- */
 public class SqlExplainResult {
 
     private Integer index;
@@ -36,6 +31,9 @@ public class SqlExplainResult {
     private String error;
     private boolean parseTrue;
     private boolean explainTrue;
+
+    private boolean isSkipped;
+
     private LocalDateTime explainTime;
 
     public SqlExplainResult() {}
@@ -71,6 +69,7 @@ public class SqlExplainResult {
         setParseTrue(builder.parseTrue);
         setExplainTrue(builder.explainTrue);
         setExplainTime(builder.explainTime);
+        setSkipped(builder.isSkipped);
     }
 
     public static SqlExplainResult success(String type, String sql, String explain) {
@@ -92,6 +91,7 @@ public class SqlExplainResult {
         builder.parseTrue = copy.isParseTrue();
         builder.explainTrue = copy.isExplainTrue();
         builder.explainTime = copy.getExplainTime();
+        builder.isSkipped = copy.isSkipped();
         return builder;
     }
 
@@ -167,6 +167,14 @@ public class SqlExplainResult {
         this.explainTime = explainTime;
     }
 
+    public boolean isSkipped() {
+        return isSkipped;
+    }
+
+    public void setSkipped(boolean skipped) {
+        isSkipped = skipped;
+    }
+
     @Override
     public String toString() {
         return String.format(
@@ -184,6 +192,7 @@ public class SqlExplainResult {
         private String error;
         private boolean parseTrue;
         private boolean explainTrue;
+        private boolean isSkipped = false;
         private LocalDateTime explainTime;
 
         private Builder() {}
@@ -229,6 +238,11 @@ public class SqlExplainResult {
 
         public Builder explainTrue(boolean val) {
             explainTrue = val;
+            return this;
+        }
+
+        public Builder isSkipped() {
+            isSkipped = true;
             return this;
         }
 

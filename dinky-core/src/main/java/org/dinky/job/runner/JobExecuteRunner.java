@@ -23,13 +23,17 @@ import org.dinky.assertion.Asserts;
 import org.dinky.data.result.IResult;
 import org.dinky.data.result.InsertResult;
 import org.dinky.data.result.ResultBuilder;
+import org.dinky.data.result.SqlExplainResult;
 import org.dinky.gateway.Gateway;
 import org.dinky.gateway.result.GatewayResult;
+import org.dinky.job.AbstractJobRunner;
 import org.dinky.job.Job;
 import org.dinky.job.JobManager;
-import org.dinky.job.JobRunner;
 import org.dinky.job.JobStatement;
 import org.dinky.parser.SqlType;
+import org.dinky.utils.FlinkStreamEnvironmentUtil;
+import org.dinky.utils.LogUtil;
+import org.dinky.utils.SqlUtil;
 import org.dinky.utils.URLUtils;
 
 import org.apache.flink.core.execution.JobClient;
@@ -37,16 +41,21 @@ import org.apache.flink.runtime.jobgraph.JobGraph;
 import org.apache.flink.runtime.jobgraph.SavepointRestoreSettings;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 
-public class JobExecuteRunner implements JobRunner {
+import cn.hutool.core.text.StrFormatter;
+import lombok.extern.slf4j.Slf4j;
 
-    private JobManager jobManager;
+@Slf4j
+public class JobExecuteRunner extends AbstractJobRunner {
+
     private List<String> statements;
 
     public JobExecuteRunner(JobManager jobManager) {
         this.jobManager = jobManager;
+        this.statements = new ArrayList<>();
     }
 
     @Override
@@ -59,6 +68,49 @@ public class JobExecuteRunner implements JobRunner {
             } else {
                 processWithoutGateway();
             }
+        }
+    }
+
+    @Override
+    public SqlExplainResult explain(JobStatement jobStatement) {
+        SqlExplainResult.Builder resultBuilder = SqlExplainResult.Builder.newBuilder();
+
+        try {
+            statements.add(jobStatement.getStatement());
+            jobManager.getExecutor().executeSql(jobStatement.getStatement());
+            if (jobStatement.isFinalExecutableStatement()) {
+                resultBuilder
+                        .explain(FlinkStreamEnvironmentUtil.getStreamingPlanAsJSON(
+                                jobManager.getExecutor().getStreamGraph()))
+                        .type(jobStatement.getSqlType().getType())
+                        .parseTrue(true)
+                        .explainTrue(true)
+                        .sql(jobStatement.getStatement())
+                        .index(jobStatement.getIndex());
+            } else {
+                resultBuilder
+                        .sql(getParsedSql())
+                        .type(jobStatement.getSqlType().getType())
+                        .index(jobStatement.getIndex())
+                        .parseTrue(true)
+                        .explainTrue(true)
+                        .isSkipped();
+            }
+        } catch (Exception e) {
+            String error = StrFormatter.format(
+                    "Exception in explaining FlinkSQL:\n{}\n{}",
+                    SqlUtil.addLineNumber(jobStatement.getStatement()),
+                    LogUtil.getError(e));
+            resultBuilder
+                    .error(error)
+                    .explainTrue(false)
+                    .type(jobStatement.getSqlType().getType())
+                    .sql(jobStatement.getStatement())
+                    .index(jobStatement.getIndex());
+            log.error(error);
+        } finally {
+            resultBuilder.explainTime(LocalDateTime.now());
+            return resultBuilder.build();
         }
     }
 

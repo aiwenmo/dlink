@@ -19,19 +19,25 @@
 
 package org.dinky.job.runner;
 
+import org.dinky.data.result.SqlExplainResult;
 import org.dinky.explainer.print_table.PrintStatementExplainer;
+import org.dinky.job.AbstractJobRunner;
 import org.dinky.job.JobManager;
-import org.dinky.job.JobRunner;
 import org.dinky.job.JobStatement;
 import org.dinky.job.JobStatementType;
 import org.dinky.parser.SqlType;
 import org.dinky.utils.IpUtil;
+import org.dinky.utils.LogUtil;
+import org.dinky.utils.SqlUtil;
 
+import java.time.LocalDateTime;
 import java.util.Map;
 
-public class JobPrintRunner implements JobRunner {
+import cn.hutool.core.text.StrFormatter;
+import lombok.extern.slf4j.Slf4j;
 
-    private JobManager jobManager;
+@Slf4j
+public class JobPrintRunner extends AbstractJobRunner {
 
     public JobPrintRunner(JobManager jobManager) {
         this.jobManager = jobManager;
@@ -50,6 +56,45 @@ public class JobPrintRunner implements JobRunner {
                     jobStatement.getIndex(), ctasStatement, JobStatementType.SQL, SqlType.CTAS);
             JobSqlRunner jobSqlRunner = new JobSqlRunner(jobManager);
             jobSqlRunner.run(ctasJobStatement);
+        }
+    }
+
+    @Override
+    public SqlExplainResult explain(JobStatement jobStatement) {
+        SqlExplainResult.Builder resultBuilder = SqlExplainResult.Builder.newBuilder();
+        try {
+            Map<String, String> config =
+                    jobManager.getExecutor().getExecutorConfig().getConfig();
+            String host = config.getOrDefault("dinky.dinkyHost", IpUtil.getHostIp());
+            int port = Integer.parseInt(config.getOrDefault("dinky.dinkyPrintPort", "7125"));
+            String[] tableNames = PrintStatementExplainer.getTableNames(jobStatement.getStatement());
+            for (String tableName : tableNames) {
+                String ctasStatement = PrintStatementExplainer.getCreateStatement(tableName, host, port);
+                JobStatement ctasJobStatement = JobStatement.generateJobStatement(
+                        jobStatement.getIndex(), ctasStatement, JobStatementType.SQL, SqlType.CTAS);
+                JobSqlRunner jobSqlRunner = new JobSqlRunner(jobManager);
+                jobSqlRunner.explain(ctasJobStatement);
+            }
+            resultBuilder
+                    .explainTrue(true)
+                    .type(jobStatement.getSqlType().getType())
+                    .sql(jobStatement.getStatement())
+                    .index(jobStatement.getIndex());
+        } catch (Exception e) {
+            String error = StrFormatter.format(
+                    "Exception in explaining FlinkSQL:\n{}\n{}",
+                    SqlUtil.addLineNumber(jobStatement.getStatement()),
+                    LogUtil.getError(e));
+            resultBuilder
+                    .error(error)
+                    .explainTrue(false)
+                    .type(jobStatement.getSqlType().getType())
+                    .sql(jobStatement.getStatement())
+                    .index(jobStatement.getIndex());
+            log.error(error);
+        } finally {
+            resultBuilder.explainTime(LocalDateTime.now());
+            return resultBuilder.build();
         }
     }
 }

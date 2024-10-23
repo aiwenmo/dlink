@@ -19,14 +19,15 @@
 
 package org.dinky.job.runner;
 
+import org.dinky.job.AbstractJobRunner;
 import org.dinky.job.JobManager;
-import org.dinky.job.JobRunner;
 import org.dinky.job.JobStatement;
 import org.dinky.trans.ddl.CustomSetOperation;
 
-public class JobSetRunner implements JobRunner {
+import lombok.extern.slf4j.Slf4j;
 
-    private JobManager jobManager;
+@Slf4j
+public class JobSetRunner extends AbstractJobRunner {
 
     public JobSetRunner(JobManager jobManager) {
         this.jobManager = jobManager;

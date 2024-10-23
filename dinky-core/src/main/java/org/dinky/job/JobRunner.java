@@ -19,7 +19,11 @@
 
 package org.dinky.job;
 
+import org.dinky.data.result.SqlExplainResult;
+
 public interface JobRunner {
 
     void run(JobStatement jobStatement) throws Exception;
+
+    SqlExplainResult explain(JobStatement jobStatement);
 }

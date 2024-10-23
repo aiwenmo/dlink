@@ -19,6 +19,8 @@
 
 package org.dinky.job;
 
+import org.dinky.parser.SqlType;
+
 import java.util.ArrayList;
 import java.util.List;
 
@@ -32,12 +34,12 @@ public class JobStatementPlan {
         return jobStatementList;
     }
 
-    public void addJobStatement(String statement, JobStatementType statementType) {
-        jobStatementList.add(new JobStatement(jobStatementList.size() + 1, statement, statementType, false));
+    public void addJobStatement(String statement, JobStatementType statementType, SqlType sqlType) {
+        jobStatementList.add(new JobStatement(jobStatementList.size() + 1, statement, statementType, sqlType, false));
     }
 
-    public void addJobStatementGenerated(String statement, JobStatementType statementType) {
-        jobStatementList.add(new JobStatement(jobStatementList.size() + 1, statement, statementType, true));
+    public void addJobStatementGenerated(String statement, JobStatementType statementType, SqlType sqlType) {
+        jobStatementList.add(new JobStatement(jobStatementList.size() + 1, statement, statementType, sqlType, true));
     }
 
     public void buildFinalExecutableStatement() {

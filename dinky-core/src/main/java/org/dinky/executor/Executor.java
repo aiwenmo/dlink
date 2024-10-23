@@ -45,6 +45,7 @@ import org.apache.flink.table.api.StatementSet;
 import org.apache.flink.table.api.TableConfig;
 import org.apache.flink.table.api.TableResult;
 import org.apache.flink.table.operations.ModifyOperation;
+import org.apache.flink.table.operations.Operation;
 
 import java.io.File;
 import java.net.URL;
@@ -245,6 +246,10 @@ public abstract class Executor {
             return tableEnvironment.explainSqlRecord(statement, extraDetails);
         }
         return null;
+    }
+
+    public SqlExplainResult explainOperation(List<Operation> operations, ExplainDetail... extraDetails) {
+        return tableEnvironment.explainOperation(operations, extraDetails);
     }
 
     public ObjectNode getStreamGraph(List<String> statements) {

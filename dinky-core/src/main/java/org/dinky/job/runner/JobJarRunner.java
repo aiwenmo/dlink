@@ -23,12 +23,13 @@ import org.dinky.assertion.Asserts;
 import org.dinky.classloader.DinkyClassLoader;
 import org.dinky.data.exception.DinkyException;
 import org.dinky.data.result.InsertResult;
+import org.dinky.data.result.SqlExplainResult;
 import org.dinky.gateway.Gateway;
 import org.dinky.gateway.config.GatewayConfig;
 import org.dinky.gateway.result.GatewayResult;
+import org.dinky.job.AbstractJobRunner;
 import org.dinky.job.Job;
 import org.dinky.job.JobManager;
-import org.dinky.job.JobRunner;
 import org.dinky.job.JobStatement;
 import org.dinky.parser.SqlType;
 import org.dinky.trans.Operations;
@@ -40,6 +41,7 @@ import org.dinky.trans.parse.ExecuteJarParseStrategy;
 import org.dinky.trans.parse.SetSqlParseStrategy;
 import org.dinky.utils.DinkyClassLoaderUtil;
 import org.dinky.utils.FlinkStreamEnvironmentUtil;
+import org.dinky.utils.LogUtil;
 import org.dinky.utils.SqlUtil;
 import org.dinky.utils.URLUtils;
 
@@ -55,17 +57,18 @@ import org.apache.flink.streaming.api.graph.StreamGraph;
 
 import java.io.File;
 import java.net.URL;
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Set;
 
 import cn.hutool.core.lang.Assert;
+import cn.hutool.core.text.StrFormatter;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class JobJarRunner implements JobRunner {
+public class JobJarRunner extends AbstractJobRunner {
 
-    private JobManager jobManager;
     private final Configuration configuration;
 
     public JobJarRunner(JobManager jobManager) {
@@ -77,13 +80,13 @@ public class JobJarRunner implements JobRunner {
     @Override
     public void run(JobStatement jobStatement) throws Exception {
         if (!jobManager.isUseGateway()) {
-            submitNormal();
+            submitNormal(jobStatement);
         } else {
             GatewayResult gatewayResult;
             if (jobManager.getRunMode().isApplicationMode()) {
-                gatewayResult = submitGateway();
+                gatewayResult = submitGateway(jobStatement);
             } else {
-                gatewayResult = submitNormalWithGateway();
+                gatewayResult = submitNormalWithGateway(jobStatement);
             }
             jobManager.getJob().setResult(InsertResult.success(gatewayResult.getId()));
             jobManager.getJob().setJobId(gatewayResult.getId());
@@ -100,15 +103,47 @@ public class JobJarRunner implements JobRunner {
         }
     }
 
-    private GatewayResult submitGateway() throws Exception {
-        configuration.set(PipelineOptions.JARS, getUris(jobManager.getJob().getStatement()));
+    @Override
+    public SqlExplainResult explain(JobStatement jobStatement) {
+        SqlExplainResult.Builder resultBuilder = SqlExplainResult.Builder.newBuilder();
+
+        try {
+            // Execute task does not support statement set.
+            Pipeline pipeline = getPipeline(jobStatement);
+            resultBuilder
+                    .explain(FlinkStreamEnvironmentUtil.getStreamingPlanAsJSON(pipeline))
+                    .type(jobStatement.getSqlType().getType())
+                    .parseTrue(true)
+                    .explainTrue(true)
+                    .sql(jobStatement.getStatement())
+                    .index(jobStatement.getIndex());
+        } catch (Exception e) {
+            String error = StrFormatter.format(
+                    "Exception in explaining FlinkSQL:\n{}\n{}",
+                    SqlUtil.addLineNumber(jobStatement.getStatement()),
+                    LogUtil.getError(e));
+            resultBuilder
+                    .error(error)
+                    .explainTrue(false)
+                    .type(jobStatement.getSqlType().getType())
+                    .sql(jobStatement.getStatement())
+                    .index(jobStatement.getIndex());
+            log.error(error);
+        } finally {
+            resultBuilder.explainTime(LocalDateTime.now());
+            return resultBuilder.build();
+        }
+    }
+
+    private GatewayResult submitGateway(JobStatement jobStatement) throws Exception {
+        configuration.set(PipelineOptions.JARS, getUris(jobStatement.getStatement()));
         jobManager.getConfig().addGatewayConfig(configuration);
-        jobManager.getConfig().getGatewayConfig().setSql(jobManager.getJob().getStatement());
+        jobManager.getConfig().getGatewayConfig().setSql(jobStatement.getStatement());
         return Gateway.build(jobManager.getConfig().getGatewayConfig()).submitJar(jobManager.getUdfPathContextHolder());
     }
 
-    private GatewayResult submitNormalWithGateway() {
-        Pipeline pipeline = getPipeline();
+    private GatewayResult submitNormalWithGateway(JobStatement jobStatement) {
+        Pipeline pipeline = getPipeline(jobStatement);
         if (pipeline instanceof StreamGraph) {
             ((StreamGraph) pipeline).setJobName(jobManager.getConfig().getJobName());
         } else if (pipeline instanceof Plan) {
@@ -116,7 +151,7 @@ public class JobJarRunner implements JobRunner {
         }
         JobGraph jobGraph = FlinkStreamEnvironmentUtil.getJobGraph(pipeline, configuration);
         GatewayConfig gatewayConfig = jobManager.getConfig().getGatewayConfig();
-        List<String> uriList = getUris(jobManager.getJob().getStatement());
+        List<String> uriList = getUris(jobStatement.getStatement());
         String[] jarPaths = uriList.stream()
                 .map(URLUtils::toFile)
                 .map(File::getAbsolutePath)
@@ -125,8 +160,8 @@ public class JobJarRunner implements JobRunner {
         return Gateway.build(gatewayConfig).submitJobGraph(jobGraph);
     }
 
-    private Pipeline getPipeline() {
-        Pipeline pipeline = getJarStreamGraph(jobManager.getJob().getStatement(), jobManager.getDinkyClassLoader());
+    private Pipeline getPipeline(JobStatement jobStatement) {
+        Pipeline pipeline = getJarStreamGraph(jobStatement.getStatement(), jobManager.getDinkyClassLoader());
         if (pipeline instanceof StreamGraph) {
             if (Asserts.isNotNullString(jobManager.getConfig().getSavePointPath())) {
                 ((StreamGraph) pipeline)
@@ -138,9 +173,9 @@ public class JobJarRunner implements JobRunner {
         return pipeline;
     }
 
-    private void submitNormal() throws Exception {
+    private void submitNormal(JobStatement jobStatement) throws Exception {
         JobClient jobClient = FlinkStreamEnvironmentUtil.executeAsync(
-                getPipeline(), jobManager.getExecutor().getStreamExecutionEnvironment());
+                getPipeline(jobStatement), jobManager.getExecutor().getStreamExecutionEnvironment());
         if (Asserts.isNotNull(jobClient)) {
             jobManager.getJob().setJobId(jobClient.getJobID().toHexString());
             jobManager.getJob().setJids(new ArrayList<String>() {

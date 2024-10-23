@@ -28,25 +28,48 @@ import org.dinky.job.runner.JobSqlRunner;
 import org.dinky.job.runner.JobUDFRunner;
 
 public class JobRunnerFactory {
-    public static JobRunner getJobRunner(JobStatementType jobStatementType, JobManager jobManager) {
+
+    private JobSetRunner jobSetRunner;
+    private JobAddRunner jobAddRunner;
+    private JobSqlRunner jobSqlRunner;
+    private JobExecuteRunner jobExecuteRunner;
+    private JobUDFRunner jobUDFRunner;
+    private JobPrintRunner jobPrintRunner;
+    private JobDDLRunner jobDDLRunner;
+
+    public JobRunnerFactory(JobManager jobManager) {
+        this.jobSetRunner = new JobSetRunner(jobManager);
+        this.jobAddRunner = new JobAddRunner(jobManager);
+        this.jobSqlRunner = new JobSqlRunner(jobManager);
+        this.jobExecuteRunner = new JobExecuteRunner(jobManager);
+        this.jobUDFRunner = new JobUDFRunner(jobManager);
+        this.jobPrintRunner = new JobPrintRunner(jobManager);
+        this.jobDDLRunner = new JobDDLRunner(jobManager);
+    }
+
+    public JobRunner getJobRunner(JobStatementType jobStatementType) {
         switch (jobStatementType) {
             case SET:
-                return new JobSetRunner(jobManager);
+                return jobSetRunner;
             case ADD:
             case ADD_FILE:
             case ADD_JAR:
-                return new JobAddRunner(jobManager);
+                return jobAddRunner;
             case SQL:
-                return new JobSqlRunner(jobManager);
+                return jobSqlRunner;
             case EXECUTE:
-                return new JobExecuteRunner(jobManager);
+                return jobExecuteRunner;
             case UDF:
-                return new JobUDFRunner(jobManager);
+                return jobUDFRunner;
             case PRINT:
-                return new JobPrintRunner(jobManager);
+                return jobPrintRunner;
             case DDL:
             default:
-                return new JobDDLRunner(jobManager);
+                return jobDDLRunner;
         }
+    }
+
+    public static JobRunnerFactory create(JobManager jobManager) {
+        return new JobRunnerFactory(jobManager);
     }
 }
