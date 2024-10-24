@@ -19,6 +19,7 @@
 
 package org.dinky.executor;
 
+import org.dinky.data.exception.DinkyException;
 import org.dinky.data.model.LineageRel;
 import org.dinky.data.result.SqlExplainResult;
 import org.dinky.parser.CustomParserImpl;
@@ -310,30 +311,34 @@ public class CustomTableEnvironmentImpl extends AbstractCustomTableEnvironment {
 
     @Override
     public SqlExplainResult explainSqlRecord(String statement, ExplainDetail... extraDetails) {
-        SqlExplainResult record = new SqlExplainResult();
         List<Operation> operations = getParser().parse(statement);
-        record.setParseTrue(true);
         if (operations.size() != 1) {
-            throw new TableException("Unsupported SQL query! explainSql() only accepts a single SQL query.");
+            throw new DinkyException("Unsupported SQL explain! explainSql() only accepts a single SQL.");
         }
+        return explainOperation(operations);
+    }
 
+    public SqlExplainResult explainOperation(List<Operation> operations, ExplainDetail... extraDetails) {
+        SqlExplainResult record = new SqlExplainResult();
+        if (operations.isEmpty()) {
+            throw new DinkyException("No statement is explained.");
+        }
+        record.setParseTrue(true);
         Operation operation = operations.get(0);
         if (operation instanceof ModifyOperation) {
+            record.setExplain(getPlanner().explain(operations, extraDetails));
             record.setType("Modify DML");
         } else if (operation instanceof ExplainOperation) {
+            record.setExplain(getPlanner().explain(operations, extraDetails));
             record.setType("Explain DML");
         } else if (operation instanceof QueryOperation) {
+            record.setExplain(getPlanner().explain(operations, extraDetails));
             record.setType("Query DML");
         } else {
             record.setExplain(operation.asSummaryString());
             record.setType("DDL");
         }
         record.setExplainTrue(true);
-        if ("DDL".equals(record.getType())) {
-            // record.setExplain("DDL语句不进行解释。");
-            return record;
-        }
-        record.setExplain(getPlanner().explain(operations, extraDetails));
         return record;
     }
 

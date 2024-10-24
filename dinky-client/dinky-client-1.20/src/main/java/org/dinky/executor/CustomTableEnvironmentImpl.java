@@ -19,6 +19,8 @@
 
 package org.dinky.executor;
 
+import org.dinky.data.exception.DinkyException;
+import org.dinky.data.result.SqlExplainResult;
 import org.dinky.operations.CustomNewParserImpl;
 
 import org.apache.flink.api.dag.Transformation;
@@ -30,13 +32,17 @@ import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
 import org.apache.flink.streaming.api.graph.JSONGenerator;
 import org.apache.flink.streaming.api.graph.StreamGraph;
 import org.apache.flink.table.api.EnvironmentSettings;
+import org.apache.flink.table.api.ExplainDetail;
+import org.apache.flink.table.api.ExplainFormat;
 import org.apache.flink.table.api.TableException;
 import org.apache.flink.table.api.bridge.java.StreamTableEnvironment;
 import org.apache.flink.table.api.internal.CachedPlan;
 import org.apache.flink.table.api.internal.TableResultInternal;
 import org.apache.flink.table.catalog.CatalogDescriptor;
+import org.apache.flink.table.operations.ExplainOperation;
 import org.apache.flink.table.operations.ModifyOperation;
 import org.apache.flink.table.operations.Operation;
+import org.apache.flink.table.operations.QueryOperation;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -174,7 +180,38 @@ public class CustomTableEnvironmentImpl extends AbstractCustomTableEnvironment {
 
     @Override
     public TableResultInternal executeCachedPlanInternal(CachedPlan cachedPlan) {
-
         return null;
+    }
+
+    public SqlExplainResult explainSqlRecord(String statement, ExplainDetail... extraDetails) {
+        List<Operation> operations = getParser().parse(statement);
+        if (operations.size() != 1) {
+            throw new DinkyException("Unsupported SQL explain! explainSql() only accepts a single SQL.");
+        }
+        return explainOperation(operations);
+    }
+
+    public SqlExplainResult explainOperation(List<Operation> operations, ExplainDetail... extraDetails) {
+        SqlExplainResult record = new SqlExplainResult();
+        if (operations.isEmpty()) {
+            throw new DinkyException("No statement is explained.");
+        }
+        record.setParseTrue(true);
+        Operation operation = operations.get(0);
+        if (operation instanceof ModifyOperation) {
+            record.setExplain(getPlanner().explain(operations, ExplainFormat.TEXT, extraDetails));
+            record.setType("Modify DML");
+        } else if (operation instanceof ExplainOperation) {
+            record.setExplain(getPlanner().explain(operations, ExplainFormat.TEXT, extraDetails));
+            record.setType("Explain DML");
+        } else if (operation instanceof QueryOperation) {
+            record.setExplain(getPlanner().explain(operations, ExplainFormat.TEXT, extraDetails));
+            record.setType("Query DML");
+        } else {
+            record.setExplain(operation.asSummaryString());
+            record.setType("DDL");
+        }
+        record.setExplainTrue(true);
+        return record;
     }
 }
