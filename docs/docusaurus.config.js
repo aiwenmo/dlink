@@ -21,8 +21,9 @@
 // Note: type annotations allow type checking and IDEs autocompletion
 const path = require('path');
 const versions = require('./versions.json');
-const lightCodeTheme = require('prism-react-renderer/themes/github');
-const darkCodeTheme = require('prism-react-renderer/themes/dracula');
+const { themes } = require('prism-react-renderer');
+const lightCodeTheme = themes.github;
+const darkCodeTheme = themes.dracula;
 
 /** @type {import('@docusaurus/types').Config} */
 const config = {
@@ -45,6 +46,13 @@ const config = {
         // structDescription: custom_fields.structDesc(),
         learningMore: 'https://space.bilibili.com/366484959/video',
         teaching: 'https://www.bilibili.com/video/BV1SX4y1Y7CB/?spm_id_from=333.337.search-card.all.click&vd_source=e806cc3d8e01f5e39a97787aca3fa3ae'
+    },
+    markdown: {
+        mdx1Compat: {
+            comments: true,
+            admonitions: true,
+            headingIds: true,
+        },
     },
     i18n: {
         defaultLocale: 'zh',
@@ -132,8 +140,8 @@ const config = {
                     ],
                     sortPosts: "descending", // 博客主页分页的排序规则(会根据时间排序) 降序: 'descending'  升序: 'ascending' | Governs the direction of blog post sorting.
                     postsPerPage: 20, // 博客主页的前{count}篇文章数 | the blog homepage show limit count
-                    readingTime: ({content, frontMatter, defaultReadingTime}) =>
-                        defaultReadingTime({content, options: {wordsPerMinute: 300}}), // 阅读时间 md文件中如果不写 date: 此属性 默认是当前时间
+                    readingTime: ({content, frontMatter, defaultReadingTime, locale}) =>
+                        defaultReadingTime({content, locale, options: {wordsPerMinute: 300}}), // 阅读时间 md文件中如果不写 date: 此属性 默认是当前时间
                 },
                 theme: {
                     customCss: require.resolve('./src/css/custom.css'), // 自定义css文件
